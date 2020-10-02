@@ -1,6 +1,8 @@
 const express = require("express");
 const socketio = require("socket.io");
 const http = require("http");
+const cors = require("cors");
+
 const {
   addUsers,
   removeUsers,
@@ -18,6 +20,10 @@ const server = http.createServer(app);
 
 const io = socketio(server);
 
+app.use(router);
+
+app.use(cors());
+
 io.on("connection", (socket) => {
   socket.on("join", ({ name, room }, callback) => {
     const { error, user } = addUsers({ id: socket.id, name, room });
@@ -32,10 +38,15 @@ io.on("connection", (socket) => {
 
     socket.broadcast.to(user.room).emit("message", {
       user: "Administrador",
-      text: `${user.name} Has joined the ${user.room}}`,
+      text: `${user.name} Has joined the ${user.room}`,
     });
 
     socket.join(user.room);
+
+    io.to(user.room).emit("roomData", {
+      room: user.room,
+      users: getSpecificUsers(user.room),
+    });
 
     callback();
   });
@@ -45,14 +56,24 @@ io.on("connection", (socket) => {
 
     io.to(user.room).emit("message", { user: user.name, text: message });
 
+    io.to(user.room).emit("roomData", {
+      room: user.room,
+      users: getSpecificUsers(user.room),
+    });
+
     callback();
   });
 
   socket.on("disconnect", () => {
-    console.log("Some user had left the Chat from backend!");
+    const user = removeUsers(socket.id);
+
+    if (user) {
+      io.to(user.room).emit("message", {
+        user: "Administrador",
+        text: `${user.name} has left the Room ${user.room}`,
+      });
+    }
   });
 });
-
-app.use(router);
 
 server.listen(PORT, () => console.log(`Server has started on PORT ${PORT}`));
